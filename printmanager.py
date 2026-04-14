@@ -12,10 +12,12 @@ class Text:
     self.reverse: bool = reverse
     self.x: int = x
     self.y: int = y
-    self.z_index: int = z_index
+    self.stored_z_index: int = z_index
     self.is_gradient: bool = False
     self.gradient_start_color: RGB = RGB.white()
     self.gradient_end_color: RGB = RGB.white()
+    self.is_visible: bool = True
+    self.z_index: int = z_index
 
   def __eq__(self, other):
     return id(self) == id(other)
@@ -32,6 +34,12 @@ class Text:
     self.is_gradient = True
     self.gradient_start_color = start_color
     self.gradient_end_color = end_color
+
+  def hide(self):
+    self.is_visible = False
+
+  def show(self):
+    self.is_visible = True
     
   def style_to_ansicode(self):
     style = ""
@@ -58,6 +66,7 @@ class Text:
         b = int(self.gradient_start_color.b * (1 - ratio) + self.gradient_end_color.b * ratio)
         char_color = RGB(r, g, b)
         string += char_color.to_ansi_color() + char
+      string += self.end + "\033[0m"
     else:
       # Add styles and colors
       string += self.style_to_ansicode() + self.color_to_ansi_color() + self.background_color_to_ansi_color() + self.text + self.end + "\033[0m"
@@ -74,7 +83,8 @@ class PrintManager:
   def print(self):
     thing_to_print = ""
     for text in sorted(self.screen, key=lambda t: t.z_index):
-      thing_to_print += text.get_print_string()
+      if text.is_visible:
+        thing_to_print += text.get_print_string()
     print(thing_to_print, end="")
 
   def clear(self):
