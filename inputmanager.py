@@ -33,7 +33,7 @@ class InputManager:
           for callback in self.key_press_callbacks:
             callback(key)
     finally:
-      termios.tcsetattr(fd, termios.TCSADRAIN, self._old_settings)
+      termios.tcsetattr(self._fd, termios.TCSADRAIN, self._old_settings)
 
   def __del__(self):
     self.stop()
