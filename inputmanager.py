@@ -1,6 +1,8 @@
 import sys, termios, tty
-import select
+import os
 import threading
+
+os.set_blocking(sys.stdin.fileno(), False)
 
 class InputManager:
   def __init__(self):
@@ -20,7 +22,8 @@ class InputManager:
 
   def stop(self):
     self._running = False
-    termios.tcsetattr(self._fd, termios.TCSADRAIN, self._old_settings)
+    if self._fd is not None and self._old_settings is not None:
+      termios.tcsetattr(self._fd, termios.TCSADRAIN, self._old_settings)
 
   def _input_loop(self):
     self._fd = sys.stdin.fileno()
@@ -28,10 +31,9 @@ class InputManager:
     try:
       tty.setcbreak(self._fd)
       while self._running:
-        if sys.stdin in select.select([sys.stdin], [], [], 0.1)[0]:
-          key = sys.stdin.read(1)
+        for line in sys.stdin:
           for callback in self.key_press_callbacks:
-            callback(key)
+            callback(line)
     finally:
       termios.tcsetattr(self._fd, termios.TCSADRAIN, self._old_settings)
 
