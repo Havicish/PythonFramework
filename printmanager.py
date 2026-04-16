@@ -20,6 +20,7 @@ class Text:
     self.gradient_start_color: RGB = RGB.white()
     self.gradient_end_color: RGB = RGB.white()
     self.is_visible: bool = True
+    self.last_is_visible: bool = True
     self.z_index: int = z_index
     self.last_x: int = x
     self.last_y: int = y
@@ -29,6 +30,7 @@ class Text:
     self.wave_amplitude: float = 1.0
     self.wave_frequency: float = 1.0
     self.wave_speed: float = 1.0
+    self._user_visible: bool = True
 
   def __eq__(self, other):
     return id(self) == id(other)
@@ -79,10 +81,10 @@ class Text:
     self.wave_speed = speed
 
   def hide(self):
-    self.is_visible = False
+    self._user_visible = False
 
   def show(self):
-    self.is_visible = True
+    self._user_visible = True
     
   def style_to_ansicode(self):
     style = ""
@@ -93,12 +95,51 @@ class Text:
     if self.dim:
       style += "\033[2m"
     return style
+  
+  def update_z_index(self):
+    if not self.is_visible:
+      self.stored_z_index = -1
+    else:
+      self.stored_z_index = self.z_index
+
+  def update_blink(self):
+    if not self._user_visible:
+      self.is_visible = False
+    elif self.blink:
+      self.is_visible = int(time.time() * 2) % 2 == 0
+    else:
+      self.is_visible = True
+
+  def update_visibility(self):
+    current_x = int(round(self.x))
+    current_y = int(round(self.y))
+    row = max(1, current_y + 1)
+    col = max(1, current_x + 1)
+
+    changed_position_or_width = (
+      self.last_x != current_x
+      or self.last_y != current_y
+      or self.last_text_length != len(self.text)
+    )
+
+    parts = []
+    if changed_position_or_width:
+      last_row = max(1, self.last_y + 1)
+      last_col = max(1, self.last_x + 1)
+      parts.append(f"\033[{last_row};{last_col}H" + (" " * self.last_text_length) + "\033[0m")
+
+    if not self.is_visible and self.last_is_visible:
+      # Clear only this text region at its own position to avoid affecting others.
+      parts.append(f"\033[{row};{col}H" + (" " * len(self.text)) + "\033[0m")
+      self.last_is_visible = self.is_visible
+      self.last_x = current_x
+      self.last_y = current_y
+      self.last_text_length = len(self.text)
+      return "".join(parts)
+    self.last_is_visible = self.is_visible
 
   def get_print_string(self, delta_time: float = 0.0):
     self.text = str(self.text)
-
-    if self.blink:
-      self.is_visible = int(time.time() * 2) % 2 == 0
 
     # ANSI cursor positioning is 1-based (row;column).
     # Keep `x`/`y` in this framework 0-based for easier use.
@@ -118,14 +159,6 @@ class Text:
       last_row = max(1, self.last_y + 1)
       last_col = max(1, self.last_x + 1)
       parts.append(f"\033[{last_row};{last_col}H" + (" " * self.last_text_length) + "\033[0m")
-
-    if not self.is_visible:
-      # Clear only this text region at its own position to avoid affecting others.
-      parts.append(f"\033[{row};{col}H" + (" " * len(self.text)) + "\033[0m")
-      self.last_x = current_x
-      self.last_y = current_y
-      self.last_text_length = len(self.text)
-      return "".join(parts)
 
     string = f"\033[{row};{col}H"
     if self.is_gradient:
@@ -185,7 +218,13 @@ class PrintManager:
 
   def print(self, delta_time: float = 0.0):
     thing_to_print = ""
+    for text in self.screen:
+      text.update_z_index()
+      text.update_blink()
     for text in sorted(self.screen, key=lambda t: t.stored_z_index):
+      thing_to_print += text.update_visibility() or ""
+      if not text.is_visible:
+        continue
       thing_to_print += text.get_print_string(delta_time)
     print(thing_to_print, end="")
 
